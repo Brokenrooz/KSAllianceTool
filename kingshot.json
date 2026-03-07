@@ -1,0 +1,21 @@
+{
+  "alliances": [
+    {
+      "id": "VAL",
+      "displayName": "VAL",
+      "info": "Alliance information placeholder",
+      "members": [
+        {
+          "id": "GID-123456",
+          "gid": "GID-123456",
+          "name": "Player1",
+          "tc": 20,
+          "power": 12345678,
+          "mystic": 5,
+          "notes": "",
+          "updatedAt": 1710000000000
+        }
+      ]
+    }
+  ]
+}
