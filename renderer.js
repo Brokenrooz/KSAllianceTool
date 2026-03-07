@@ -1,5 +1,7 @@
 const $ = (id) => document.getElementById(id);
 
+const UNASSIGNED_TAG = "__UNASSIGNED__"; //-- fake alliance for profiles with no assigned alliance tag.
+
 const views = {
   home: $("homeView"),
   alliance: $("allianceView"),
@@ -233,7 +235,44 @@ function allianceLabel(a) {
   return `[${tag}] ${name}`;
 }
 
+function getUnassignedMembers() {
+  // Global profiles that are NOT in any roster and have no allianceTag ("None"/blank). -X
+  ensurePlayersStore();
+  const inRoster = new Set();
+  for (const a of (data.alliances ?? [])) for (const m of (a.members ?? [])) {
+    const gid = String(m.gid ?? m.id ?? "").trim();
+    if (gid) inRoster.add(gid);
+  }
+  const rows = [];
+  for (const [gid, p] of Object.entries(data.players ?? {})) {
+    if (!gid) continue;
+    if (inRoster.has(gid)) continue;
+    const tag = String(p.allianceTag ?? "").trim();
+    if (tag && tag !== "None") continue;
+    rows.push({
+      id: gid, gid,
+      name: (p.name ?? "").trim(),
+      alias: (p.alias ?? "").trim(),
+      tc: p.tc ?? "",
+      power: normalizeNum(p.power),
+      mystic: normalizeNum(p.mystic),
+      notes: (p.notes ?? "").trim(),
+      updatedAt: normalizeNum(p.updatedAt) || 0,
+    });
+  }
+  return rows;
+}
+
 function getAllianceByTag(tag) {
+  if (tag === UNASSIGNED_TAG) {
+    return {
+      id: UNASSIGNED_TAG,
+      tag: "None",
+      name: "Unassigned",
+      info: "Profiles with no alliance tag assigned.",
+      members: getUnassignedMembers(),
+    };
+  }
   return data.alliances.find(a => (a.id ?? a.tag) === tag) ?? null;
 }
 
@@ -319,6 +358,14 @@ function renderAllianceList(targetEl, activeTag) {
     btn.onclick = () => selectAlliance(tag);
     targetEl.appendChild(btn);
   }
+
+  // Pseudo-tab: profiles that exist only in global cache with no allianceTag. -X
+  const unassignedCount = getUnassignedMembers().length;
+  const ubtn = document.createElement("button");
+  ubtn.className = "listItem" + (UNASSIGNED_TAG === activeTag ? " active" : "");
+  ubtn.textContent = unassignedCount ? `[None] Unassigned (${unassignedCount})` : "[None] Unassigned";
+  ubtn.onclick = () => selectAlliance(UNASSIGNED_TAG);
+  targetEl.appendChild(ubtn);
 }
 
 function selectAlliance(tag) {
@@ -331,9 +378,17 @@ function selectAlliance(tag) {
     els.allianceInfo.textContent = "Select an alliance.";
     setAllianceButtonsEnabled(false);
   } else {
-    els.allianceTitle.textContent = allianceLabel(a);
-    els.allianceInfo.textContent = a.info ?? "";
-    setAllianceButtonsEnabled(true);
+    if (tag === UNASSIGNED_TAG) {
+      els.allianceTitle.textContent = "[None] Unassigned";
+      els.allianceInfo.textContent = a.info ?? "Profiles with no alliance tag assigned.";
+      setAllianceButtonsEnabled(true);
+      if (els.editAllianceBtn) els.editAllianceBtn.disabled = true; // pseudo-alliance -X
+      if (els.removeAllianceBtn) els.removeAllianceBtn.disabled = true; // pseudo-alliance -X
+    } else {
+      els.allianceTitle.textContent = allianceLabel(a);
+      els.allianceInfo.textContent = a.info ?? "";
+      setAllianceButtonsEnabled(true);
+    }
   }
 
   renderAllianceList(els.allianceList, state.currentAllianceId);
@@ -426,7 +481,11 @@ function openRoster(forceShow = true) {
   els.editMemberBtn.disabled = true;
   els.removeMemberBtn.disabled = true;
 
-  els.rosterAllianceTitle.textContent = `${allianceLabel(a)} Roster`;
+  // Special title for the unassigned pseudo-tab.
+  els.rosterAllianceTitle.textContent =
+    (state.currentAllianceId === UNASSIGNED_TAG)
+      ? "[None] Unassigned Roster"
+      : `${allianceLabel(a)} Roster`;
 
   if (forceShow) showView("roster");
   renderRoster();
@@ -514,7 +573,7 @@ function collectLeaderboardRows() {
     if (inRoster.has(gid)) continue;
 
     const tag = String(p.allianceTag ?? "").trim() || "None";
-    const name = p.name ?? gid;
+    const name = (p.name ?? "").trim() || gid;
     const alias = p.alias ?? "";
     const display = alias ? `${name} (${alias})` : name;
 
@@ -722,6 +781,18 @@ async function saveMemberFromModal() {
     updatedAt: Date.now(),
   };
 
+  if (state.currentAllianceId === UNASSIGNED_TAG) {
+    // Unassigned pseudo-tab: update global profile cache only
+    ensurePlayersStore();
+    const existing = data.players[gid] ?? {};
+    data.players[gid] = { ...existing, ...memberData, allianceTag: "None" };
+    await saveData();
+    closeMemberModal();
+    state.selectedMemberId = gid;
+    renderRoster();
+    return;
+  }
+
   a.members = a.members ?? [];
 
   if (state.memberModalMode === "add") {
@@ -761,7 +832,7 @@ function openAllianceModal(mode) {
     els.aTag.value = "";
     els.aName.value = "";
     els.aInfo.value = "";
-    els.aUseAlias.checked = false;
+    if (els.aUseAlias) els.aUseAlias.checked = false; //-- Legacy checkbox removed from HTML.
 
   } else {
     const a = getCurrentAlliance();
@@ -1317,6 +1388,22 @@ document.addEventListener("DOMContentLoaded", async () => {
       try {
         const a = getCurrentAlliance();
         if (!a) return;
+
+        if (state.currentAllianceId === UNASSIGNED_TAG) {
+          // Unassigned pseudo-tab: removal deletes the standalone profile record. -X
+          ensurePlayersStore();
+          const gid = String(state.selectedMemberId ?? "").trim();
+          const p = data.players?.[gid];
+          if (!gid || !p) return;
+          const label = (p.name ?? "").trim() || gid;
+          if (!confirm(`Remove ${label}? (This deletes the standalone profile)`)) return;
+          delete data.players[gid];
+          state.selectedMemberId = null;
+          await saveData();
+          renderRoster();
+          return;
+        }
+
         const m = (a.members ?? []).find(x => x.id === state.selectedMemberId);
         if (!m) return;
 
