@@ -54,6 +54,9 @@ const els = {
   uSuggest: $("uSuggest"),
   applyUpdateBtn: $("applyUpdateBtn"),
   clearUpdateBtn: $("clearUpdateBtn"),
+  importPatchBtn: $("importPatchBtn"),
+  exportPatchBtn: $("exportPatchBtn"),
+  importPatchFile: $("importPatchFile"),
   updateResult: $("updateResult"),
   updateDeltaBox: $("updateDeltaBox"),
   // Add User modal
@@ -350,7 +353,15 @@ async function saveData() {
 function renderAllianceList(targetEl, activeTag) {
   if (!targetEl) return;
   targetEl.innerHTML = "";
-  for (const a of data.alliances) {
+
+  const calcAlliancePower = (a) => (a?.members ?? []).reduce((sum, m) => sum + normalizeNum(m?.power), 0); // sum member power
+  const alliancesSorted = [...(data.alliances ?? [])].sort((a, b) => {
+    const d = calcAlliancePower(b) - calcAlliancePower(a);
+    if (d !== 0) return d;
+    return String(a?.tag ?? a?.id ?? "").localeCompare(String(b?.tag ?? b?.id ?? ""));
+  });
+
+  for (const a of alliancesSorted) {
     const tag = (a.id ?? a.tag);
     const btn = document.createElement("button");
     btn.className = "listItem" + (tag === activeTag ? " active" : "");
@@ -689,8 +700,9 @@ function openMemberModal(mode) {
   const a = getCurrentAlliance();
   if (!a) return;
 
-  state.memeberModalMode = mode;
+  state.memberModalMode = mode;
   if (els.aliasBlock) els.aliasBlock.classList.remove("hidden");
+  if (els.mGid) els.mGid.readOnly = (mode !== "add");
 
   if (mode === "add") {
     els.modalTitle.textContent = "Add Member";
@@ -716,6 +728,7 @@ function openMemberModal(mode) {
   }
 
   els.memberModal.classList.remove("hidden");
+  if (els.mName) els.mName.focus();
   els.mGid.focus();
 }
 
@@ -807,7 +820,7 @@ async function saveMemberFromModal() {
     if (idx < 0) return;
 
     // Prevent collisions if someone changes gid (rare)
-    if (gid !== state.selectedMemberId && a.members.some(m => (m.gid ?? m.id) === gid)) {
+    if (a.members.some((m, i) => i !== idx && (m.gid ?? m.id) === gid)) {
       alert("That GID is already in this alliance.");
       return;
     }
@@ -1105,6 +1118,236 @@ function clearUpdateUI() {
     els.updateDeltaBox.textContent = "No updates yet.";
   }
 }
+
+function downloadTextFile(filename, text, mine = "application/json") {
+  // file exp via browser download
+  const blob = new Blob([text], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 0);
+}
+
+function buildContributionRows() {
+  // Builds a deduped patch from current cache (alliances first, then standalone profiles)
+  ensurePlayersStore();
+
+  const rowsByGid = new Map();
+  const inRoster = new Set();
+
+  for (const a of (data.alliances ?? [])) {
+    const tag = String(a.tag ?? a.id ?? "").trim();
+    for (const m of (a.members ?? [])) {
+      const gid = String(m.gid ?? m.id ?? "").trim();
+      if (!gid) continue;
+      inRoster.add(gid);
+
+      rowsByGid.set(gid, {
+        gid,
+        tag,
+        name: (m.name ?? "").trim(),
+        alias: (m.alias ?? "").trim(),
+        tc: (m.tc ?? "").trim(),
+        power: normalizeNum(m.power),
+        mystic: normalizeNum(m.mystic),
+        notes: (m.notes ?? "").trim(),
+      });
+    }
+  }
+
+  for (const [gid, p] of Object.entries(data.players ?? {})) {
+    if (!gid) continue;
+    if (inRoster.has(gid)) continue;
+
+    const tag = String(p.allianceTag ?? "").trim() || "None";
+    rowsByGid.set(gid, {
+      gid,
+      tag,
+      name: (p.name ?? "").trim(),
+      alias: (p.alias ?? "").trim(),
+      tc: (p.tc ?? "").trim(),
+      power: normalizeNum(p.power),
+      mystic: normalizeNum(p.mystic),
+      notes: (p.notes ?? "").trim(),
+    });
+  }
+
+  return [...rowsByGid.values()];
+}
+
+function exportContributionPatch() {
+  const rows = buildContributionRows();
+  const payload = {
+    schemaVersion: 1,
+    exportedAt: new Date().toISOString(),
+    rows,
+  };
+
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  const filename = `kslookup_patch_${yyyy}-${mm}-${dd}.json`;
+
+  downloadTextFile(filename, JSON.stringify(payload, null, 2));
+  showUpdateResult(`Exported patch: ${filename}\nRows: ${rows.length}`);
+}
+
+function parseCsvLoose(text) {
+  // Minimal CSV parser (supports quoted fields)
+  const rows = [];
+  let row = [];
+  let cur = "";
+  let inQ = false;
+
+  const pushCell = () => { row.push(cur); cur = ""; };
+  const pushRow = () => {
+    if (row.length === 1 && String(row[0] ?? "").trim() === "") return;
+    rows.push(row);
+    row = [];
+  };
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    const next = text[i + 1];
+
+    if (inQ) {
+      if (ch === '"' && next === '"') { cur += '"'; i++; continue; }
+      if (ch === '"') { inQ = false; continue; }
+      cur += ch;
+      continue;
+    }
+
+    if (ch === '"') { inQ = true; continue; }
+    if (ch === ",") { pushCell(); continue; }
+    if (ch === "\n") { pushCell(); pushRow(); continue; }
+    if (ch === "\r") continue;
+    cur += ch;
+  }
+  pushCell(); pushRow();
+  return rows;
+}
+
+async function importPatchText(text, filename = "") {
+  const trimmed = String(text ?? "").trim();
+  if (!trimmed) { alert("Import failed: empty file."); return; }
+
+  let rows = null;
+
+  // JSON path
+  if (filename.toLowerCase().endsWith(".json") || trimmed.startsWith("{") || trimmed.startsWith("[")) {
+    const parsed = JSON.parse(trimmed);
+    if (Array.isArray(parsed)) rows = parsed;
+    else if (parsed && Array.isArray(parsed.rows)) rows = parsed.rows;
+    else throw new Error("JSON patch must be an array or { rows: [...] }");
+  } else {
+    // CSV path
+    const table = parseCsvLoose(trimmed);
+    const header = (table.shift() ?? []).map(h => String(h ?? "").trim().toLowerCase());
+    const idx = (k) => header.indexOf(k);
+
+    const iG = idx("gid");
+    const iT = idx("tag");
+    const iN = idx("name");
+    const iA = idx("alias");
+    const iTC = idx("tc");
+    const iP = idx("power");
+    const iM = idx("mystic");
+    const iNo = idx("notes");
+
+    rows = table.map(r => ({
+      gid: r[iG],
+      tag: r[iT],
+      name: r[iN],
+      alias: r[iA],
+      tc: r[iTC],
+      power: r[iP],
+      mystic: r[iM],
+      notes: r[iNo],
+    }));
+  }
+
+  // Apply
+  ensurePlayersStore();
+  const now = Date.now();
+
+  let upserts = 0;
+  let rosterUpserts = 0;
+  const missingTags = new Set();
+
+  const findAllianceByTagExact = (tag) =>
+    (data.alliances ?? []).find(a => (a.tag ?? a.id ?? "") === tag) ?? null;
+
+  for (const r of (rows ?? [])) {
+    const gid = String(r?.gid ?? "").trim();
+    if (!gid) continue;
+
+    const tagRaw = String(r?.tag ?? "").trim();
+    const tag = (tagRaw && tagRaw !== "None") ? tagRaw : "";
+
+    const name = String(r?.name ?? "").trim();
+    const alias = String(r?.alias ?? "").trim();
+    const tc = String(r?.tc ?? "").trim();
+
+    let power = 0;
+    if (typeof r?.power === "number") power = Math.round(r.power);
+    else power = parsePowerInput(String(r?.power ?? "").trim()) ?? normalizeNum(r?.power);
+
+    let mystic = 0;
+    if (typeof r?.mystic === "number") mystic = Math.round(r.mystic);
+    else mystic = normalizeNum(String(r?.mystic ?? "").trim());
+
+    const notes = String(r?.notes ?? "").trim();
+
+    // Cache upsert (always)
+    const existing = data.players[gid] ?? {};
+    data.players[gid] = {
+      ...existing,
+      gid,
+      name: name || existing.name || "",
+      alias: alias || existing.alias || "",
+      tc: tc || existing.tc || "",
+      power: Number.isFinite(power) ? power : (existing.power ?? 0),
+      mystic: Number.isFinite(mystic) ? mystic : (existing.mystic ?? 0),
+      notes: notes || existing.notes || "",
+      updatedAt: now,
+      allianceTag: "None",
+    };
+
+    // Roster upsert if alliance exists
+    if (tag) {
+      const a = findAllianceByTagExact(tag);
+      if (!a) {
+        missingTags.add(tag);
+      } else {
+        data.players[gid].allianceTag = tag;
+        if (!Array.isArray(a.members)) a.members = [];
+        const mi = a.members.findIndex(m => String(m.gid ?? m.id ?? "").trim() === gid);
+        const mp = { gid, name, alias, tc, power, mystic, notes };
+        if (mi >= 0) a.members[mi] = { ...a.members[mi], ...mp };
+        else a.members.push(mp);
+        rosterUpserts++;
+      }
+    }
+
+    upserts++;
+  }
+
+  await saveData();
+
+  // Refresh visible views
+  if (views.leaderboard && !views.leaderboard.classList.contains("hidden")) renderLeaderboard();
+  if (views.roster && !views.roster.classList.contains("hidden")) renderRoster();
+  renderAllianceList?.(els.allianceList, state.currentAllianceId);
+  renderAllianceList?.(els.allianceList2, state.currentAllianceId);
+
+  const missing = missingTags.size ? `\nMissing alliance tags (imported as [None]): ${[...missingTags].join(", ")}` : "";
+  showUpdateResult(`Imported patch file: ${filename || "(unknown)"}\nRows processed: ${upserts}\nRoster upserts: ${rosterUpserts}${missing}`);
+}
+
 
 function findPlayerByLookup(lookupRaw) {
   const lookup = (lookupRaw ?? "").trim();
@@ -1507,6 +1750,40 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Update actions
     els.addUserBtn?.addEventListener("click", () => openAddUserModal());
+
+    els.exportPathBtn?.addEventListener("click", () => {
+      try { exportContributionPatch(); }
+      catch (e) { console.error(e); alert("Export failed: " + (e?.message ?? String(e))); }
+    });
+
+    els.importPatchBtn?.addEventListener("click", () => {
+
+      els.importPatchFile?.click();
+    });
+
+    els.importPatchFile?.addEventListener("change", async (e) => {
+      try {
+        const file = e?.target?.files?.[0];
+        if (!file) return;
+        const text = await (file.text ? file.text() : new Promise((res, rej) => {
+          const r = new FileReader();
+          r.onload = () => res(String(r.result ?? ""));
+          r.onerror = () => rej(r.error);
+          r.readAsText(file);
+        }));
+        await importPatchText(text, file.name);
+      } catch (err) {
+        console.error(err);
+        alert("Import failed: " + (err?.message ?? String(err)));
+      } finally {
+        if (els.importPatchFile) els.importPatchFile.value = ""; // allow re-import same file
+      }
+    });
+
+    els.applyUpdateBtn?.addEventListener("click", async () => {
+      try { await applyUpdate(); }
+      catch (e) { console.error(e); alert("Update failed: " + (e?.message ?? String(e))); }
+    });
 
     els.applyUpdateBtn?.addEventListener("click", async () => {
       try { await applyUpdate(); }

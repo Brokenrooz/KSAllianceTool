@@ -890,6 +890,12 @@
             <button id="clearUpdateBtn" style="width:auto;">Clear</button>
           </div>
 
+          <div style="display:flex; gap:10px; margin-top:10px;">
+            <button id="importPatchBtn" style="width:auto;">Import Patch</button>
+            <button id="exportPatchBtn" style="width:auto;">Export Patch</button>
+            <input id="importPatchFile" type="file" accept=".json,.csv" class="hidden" />
+          </div>
+
           <div id="updateResult" class="noticeBox" style="display:none;"></div>
         </div>
 
@@ -910,20 +916,14 @@
     <div class="modalCard">
       <h3 id="modalTitle">Add Member</h3>
 
-      <label>Game ID (gid) — REQUIRED</label>
-      <input id="mGid" type="text" placeholder="Required: unique player ID" autocomplete="off" spellcheck="false" />
-      <div class="muted" style="margin-top:6px;">
-        This app identifies players by GID (unique ID).
-      </div>
-
       <label>Name</label>
       <input id="mName" type="text" inputmode="text" autocomplete="off" spellcheck="false" />
 
-      <div id="aliasRow">
+      <div id="aliasRow" class="hidden">
         <label>English Alias</label>
         <input id="mAlias" type="text" placeholder="Optional (e.g., KimCheolsu)" autocomplete="off"
           spellcheck="false" />
-        <div class="muted" style="margin-top:6px;">Shown as “Name (Alias)” when an alias is provided.</div>
+        <div class="muted" style="margin-top:6px;">Shown as “Name (Alias)” when enabled for this alliance.</div>
       </div>
 
       <label>TC (1–30 or TG1–TG5)</label>
@@ -934,6 +934,12 @@
 
       <label>Mystic</label>
       <input id="mMystic" type="number" min="0" />
+
+      <label>Game ID (gid) — REQUIRED</label>
+      <input id="mGid" type="text" placeholder="Required: unique player ID" autocomplete="off" spellcheck="false" />
+      <div class="muted" style="margin-top:6px;">
+        This app identifies players by GID (unique ID).
+      </div>
 
       <label>Notes</label>
       <input id="mNotes" type="text" />
@@ -989,12 +995,6 @@
       <div class="muted">Adds/updates a profile in the global cache. Useful for players not currently listed in an
         alliance roster.</div>
 
-      <label>Game ID (gid) — REQUIRED</label>
-      <input id="auGid" type="text" placeholder="Required: unique player ID" autocomplete="off" spellcheck="false" />
-
-      <label>Alliance Tag (optional)</label>
-      <input id="auAlliance" type="text" placeholder="Leave blank for [None]" autocomplete="off" spellcheck="false" />
-
       <label>Name</label>
       <input id="auName" type="text" autocomplete="off" spellcheck="false" />
 
@@ -1010,6 +1010,12 @@
 
       <label>Mystic</label>
       <input id="auMystic" type="number" min="0" placeholder="0" />
+
+      <label>Game ID (gid) — REQUIRED</label>
+      <input id="auGid" type="text" placeholder="Required: unique player ID" autocomplete="off" spellcheck="false" />
+
+      <label>Alliance Tag (optional)</label>
+      <input id="auAlliance" type="text" placeholder="Leave blank for [None]" autocomplete="off" spellcheck="false" />
 
       <label>Notes</label>
       <input id="auNotes" type="text" />
@@ -1028,5 +1034,3 @@
 </body>
 
 </html>
-
-
