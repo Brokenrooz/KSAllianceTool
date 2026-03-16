@@ -707,6 +707,146 @@
     .modalCard>* {
       position: relative;
     }
+
+    .profileStage {
+      display: grid;
+      grid-template-columns: 320px 1fr 320px;
+      gap: 16px;
+      align-items: start;
+      margin-top: 12px;
+    }
+
+    .profileCol {
+      min-width: 0;
+    }
+
+    .paperdoll {
+      height: 320px;
+      border: 1px solid rgba(255, 255, 255, 0.10);
+      border-radius: 14px;
+      background: rgba(0, 0, 0, 0.28);
+      backdrop-filter: blur(2px);
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .paperdollLabel {
+      font-size: 12px;
+      opacity: 0.8;
+    }
+
+    .paperdollBody {
+      height: 240px;
+      border-radius: 12px;
+      border: 1px dashed rgba(255, 255, 255, 0.12);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0.8;
+    }
+
+    .govSlots {
+      margin-top: 12px;
+      display: flex;
+      justify-content: space-between;
+      gap: 14px;
+    }
+
+    .slotCol {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .profileSectionTitle {
+      font-weight: 700;
+      margin: 6px 0 10px;
+      opacity: 0.9;
+    }
+
+    .heroStrip {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .heroCard {
+      flex: 1;
+      min-width: 220px;
+      border: 1px solid rgba(255, 255, 255, 0.10);
+      border-radius: 14px;
+      background: rgba(0, 0, 0, 0.22);
+      backdrop-filter: blur(2px);
+      padding: 10px;
+    }
+
+    .heroTop {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .heroIcon {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: rgba(0, 0, 0, 0.28);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      opacity: 0.85;
+    }
+
+    .heroName {
+      font-weight: 700;
+      opacity: 0.9;
+    }
+
+    .heroSlotsGrid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+
+    .gearSlot {
+      height: 52px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: rgba(0, 0, 0, 0.30);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      opacity: 0.88;
+      user-select: none;
+    }
+
+    .gearSlot:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 10px 26px rgba(0, 0, 0, 0.35);
+    }
+
+    .gearTooltip {
+      position: fixed;
+      z-index: 99999;
+      min-width: 220px;
+      max-width: 360px;
+      padding: 10px 12px;
+      background: rgba(16, 20, 28, 0.86);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 14px;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 14px 34px rgba(0, 0, 0, 0.45);
+      pointer-events: none;
+      white-space: pre-wrap;
+      font-size: 12px;
+      line-height: 1.25;
+    }
   </style>
 </head>
 
@@ -812,7 +952,113 @@
     <div class="panel right">
       <button id="addMemberBtn">Add Member</button>
       <button id="editMemberBtn" disabled>Edit Member</button>
+      <button id="viewProfileBtn" disabled>View Profile</button>
       <button id="removeMemberBtn" disabled>Remove Member</button>
+    </div>
+  </div>
+
+  <!-- PROFILE VIEW -->
+  <div id="profileView" class="layout3 hidden">
+    <div class="panel left">
+      <h2>Menu</h2>
+      <button id="backToRosterFromProfileBtn">Back</button>
+      <button id="backHomeFromProfileBtn">Home</button>
+    </div>
+
+    <div class="panel center">
+      <div class="centerScroll">
+        <div class="rosterHeader">
+          <h2 id="profileTitle">Member Profile</h2>
+          <div id="profileMeta" class="muted">-</div>
+        </div>
+
+        <div class="profileStage">
+          <div class="profileCol">
+            <div class="paperdoll">
+              <div class="paperdollLabel">Governor</div>
+              <div class="paperdollBody">Avatar Placeholder</div>
+            </div>
+
+            <div class="govSlots" id="profileGovSlots">
+              <div class="slotCol">
+                <div class="gearSlot" data-scope="gov" data-slot="1">G1</div>
+                <div class="gearSlot" data-scope="gov" data-slot="2">G2</div>
+                <div class="gearSlot" data-scope="gov" data-slot="3">G3</div>
+              </div>
+              <div class="slotCol">
+                <div class="gearSlot" data-scope="gov" data-slot="4">G4</div>
+                <div class="gearSlot" data-scope="gov" data-slot="5">G5</div>
+                <div class="gearSlot" data-scope="gov" data-slot="6">G6</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="profileCol">
+            <div class="profileSectionTitle">Top 3 Heroes</div>
+            <div class="heroStrip" id="profileHeroStrip">
+              <div class="heroCard" data-hero="0">
+                <div class="heroTop">
+                  <div class="heroIcon">H1</div>
+                  <div class="heroName" id="hero0Name">Hero 1</div>
+                </div>
+                <div class="heroSlotsGrid" id="hero0Slots">
+                  <div class="gearSlot" data-scope="hero0" data-slot="1">1</div>
+                  <div class="gearSlot" data-scope="hero0" data-slot="2">2</div>
+                  <div class="gearSlot" data-scope="hero0" data-slot="3">3</div>
+                  <div class="gearSlot" data-scope="hero0" data-slot="4">4</div>
+                  <div class="gearSlot" data-scope="hero0" data-slot="5">5</div>
+                  <div class="gearSlot" data-scope="hero0" data-slot="6">6</div>
+                </div>
+              </div>
+
+              <div class="heroCard" data-hero="1">
+                <div class="heroTop">
+                  <div class="heroIcon">H2</div>
+                  <div class="heroName" id="hero1Name">Hero 2</div>
+                </div>
+                <div class="heroSlotsGrid" id="hero1Slots">
+                  <div class="gearSlot" data-scope="hero1" data-slot="1">1</div>
+                  <div class="gearSlot" data-scope="hero1" data-slot="2">2</div>
+                  <div class="gearSlot" data-scope="hero1" data-slot="3">3</div>
+                  <div class="gearSlot" data-scope="hero1" data-slot="4">4</div>
+                  <div class="gearSlot" data-scope="hero1" data-slot="5">5</div>
+                  <div class="gearSlot" data-scope="hero1" data-slot="6">6</div>
+                </div>
+              </div>
+
+              <div class="heroCard" data-hero="2">
+                <div class="heroTop">
+                  <div class="heroIcon">H3</div>
+                  <div class="heroName" id="hero2Name">Hero 3</div>
+                </div>
+                <div class="heroSlotsGrid" id="hero2Slots">
+                  <div class="gearSlot" data-scope="hero2" data-slot="1">1</div>
+                  <div class="gearSlot" data-scope="hero2" data-slot="2">2</div>
+                  <div class="gearSlot" data-scope="hero2" data-slot="3">3</div>
+                  <div class="gearSlot" data-scope="hero2" data-slot="4">4</div>
+                  <div class="gearSlot" data-scope="hero2" data-slot="5">5</div>
+                  <div class="gearSlot" data-scope="hero2" data-slot="6">6</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="profileCol">
+            <div class="profileSectionTitle">Totals</div>
+            <div class="noticeBox" id="govTotalsBox">Governor totals: (no data yet)</div>
+            <div class="noticeBox" id="heroTotalsBox">Hero totals: (no data yet)</div>
+            <div class="muted" style="margin-top:10px;">
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel right">
+      <div class="noticeBox">
+        <strong>Profile View</strong><br />
+        Click a slot to see details.<br />
+      </div>
     </div>
   </div>
 
@@ -851,7 +1097,8 @@
 
     <div class="panel right">
       <div class="muted">Read-only</div>
-      <div class="noticeBox">This view aggregates every member currently stored in the app and ranks them by Power.
+      <div class="noticeBox">This view aggregates every member currently stored in the app and ranks them by
+        Power.
       </div>
     </div>
   </div>
@@ -868,7 +1115,8 @@
       <div class="centerScroll">
 
         <h1>Update Player</h1>
-        <div class="muted">Updates existing entries (across alliances) by GID or Name. Leave a field blank to not
+        <div class="muted">Updates existing entries (across alliances) by GID or Name. Leave a field blank to
+          not
           overwrite it.</div>
 
         <div style="max-width: 560px; margin-top: 14px;">
@@ -897,6 +1145,8 @@
           </div>
 
           <div id="updateResult" class="noticeBox" style="display:none;"></div>
+
+          <div class="muted" style="margin-top:12px;">Last update</div>
         </div>
 
       </div>
@@ -923,7 +1173,8 @@
         <label>English Alias</label>
         <input id="mAlias" type="text" placeholder="Optional (e.g., KimCheolsu)" autocomplete="off"
           spellcheck="false" />
-        <div class="muted" style="margin-top:6px;">Shown as “Name (Alias)” when enabled for this alliance.</div>
+        <div class="muted" style="margin-top:6px;">Shown as “Name (Alias)” when enabled for this alliance.
+        </div>
       </div>
 
       <label>TC (1–30 or TG1–TG5)</label>
@@ -992,7 +1243,8 @@
   <div id="addUserModal" class="modal hidden">
     <div class="modalCard">
       <h3>Add User</h3>
-      <div class="muted">Adds/updates a profile in the global cache. Useful for players not currently listed in an
+      <div class="muted">Adds/updates a profile in the global cache. Useful for players not currently listed in
+        an
         alliance roster.</div>
 
       <label>Name</label>
@@ -1029,6 +1281,7 @@
     </div>
   </div>
 
+  <div id="gearTooltip" class="gearTooltip hidden"></div>
 
   <script src="./renderer.js"></script>
 </body>
