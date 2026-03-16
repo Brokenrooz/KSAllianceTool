@@ -8,6 +8,7 @@ const views = {
   roster: $("rosterView"),
   leaderboard: $("leaderboardView"),
   update: $("updateView"),
+  profile: $("profileView"),
 };
 
 const els = {
@@ -37,7 +38,21 @@ const els = {
   addMemberBtn: $("addMemberBtn"),
   editMemberBtn: $("editMemberBtn"),
   removeMemberBtn: $("removeMemberBtn"),
+  viewProfileBtn: $("viewProfileBtn"),
   openUpdateFromRosterBtn: $("openUpdateFromRosterBtn"),
+
+  // Advanced Profile View
+  backtoRosterFromProfileBtn: $("backToRosterFromProfileBtn"),
+  backHomeFromProfileBtn: $("backHomeFromProfileBtn"),
+  profileTitle: $("profileTitle"),
+  profileMeta: $("profileMeta"),
+  profileGovSlots: $("profileGovSlots"),
+  hero0Name: $("hero0Name"),
+  hero1Name: $("hero1Name"),
+  hero2Name: $("hero2Name"),
+  govTotalsBox: $("govTotalsBox"),
+  heroTotalsBox: $("heroTotalsBox"),
+  gearTooltip: $("gearTooltip"),
 
   // Leaderboard view
   backHomeFromLeaderboardBtn: $("backHomeFromLeaderboardBtn"),
@@ -110,6 +125,9 @@ let data = { alliances: [], players: {} };
 const state = {
   currentAllianceId: null,
   selectedMemberId: null,
+
+  profileGid: null,
+  profileBackView: "roster",
 
   sortKey: "power",
   sortDir: "desc",
@@ -491,6 +509,7 @@ function openRoster(forceShow = true) {
   state.selectedMemberId = null;
   els.editMemberBtn.disabled = true;
   els.removeMemberBtn.disabled = true;
+  if (els.viewProfileBtn) els.viewProfileBtn.disabled = true;
 
   // Special title for the unassigned pseudo-tab.
   els.rosterAllianceTitle.textContent =
@@ -534,15 +553,154 @@ function renderRoster() {
       <td>${m.notes ?? ""}</td>
     `;
 
+    tr.ondblclick = () => {
+      openProfileView(m.id, "roster");
+    };
+
     tr.onclick = () => {
       state.selectedMemberId = m.id;
       els.editMemberBtn.disabled = false;
       els.removeMemberBtn.disabled = false;
+      if (els.viewProfileBtn) els.viewProfileBtn.disabled = false;
       renderRoster();
     };
 
     els.rosterBody.appendChild(tr);
   }
+}
+
+// ---------- profile view (advanced)   ----------
+function openProfileView(gid, backView = "roster") {
+  const id = String(gid ?? "").trim();
+  if (!id) return;
+  state.profileGid = id;
+  state.profileBackView = backView;
+  showView("profile");
+  renderProfileView();
+}
+
+function closeProfileView() {
+  const back = state.profileVackView ?? "roster";
+  showView(back);
+  if (back === "roster") renderRoster();
+  if (back === "leaderboard") renderLeaderboard();
+}
+
+function findMemberRecordByGid(gid) {
+  const id = String(gid ?? "").trim();
+  if (!id) return null;
+
+  // prefer current alliance context
+  const cur = getCurrentAlliance();
+  if (cur && state.currentAllianceId !== UNASSIGNED_TAG) {
+    const m = (cur.members ?? []).find(x => String(x.gid ?? x.id ?? "").trim() === id);
+    if (m) return { member: m, alliance: cur, source: "currentRoster" };
+  }
+
+  // search alliance all
+  for (const a of (data.alliances ?? [])) {
+    const m = (a.members ?? []).find(x => String(x.gid ?? x.id ?? "").trim() === id);
+    if (m) return { member: m, alliance: a, source: "anyRoster" };
+  }
+
+  // fallback: global profile(s) cache
+  ensurePlayersStore();
+  const p = data.players?.[id];
+  if (p) return { member: p, alliance: null, source: "players" };
+
+  return null;
+}
+
+function buildSlotTooltip(slotData, label) {
+  if (!slotData) return `${label}\n\nEmpty slot.`;
+  const lines = [];
+  lines.push(slotData.name ?? label);
+  if (slotData.tier != null) lines.push(`Tier: ${slotData.tier}`);
+  if (slotData.level != null) lines.push(`Level: ${slotData.level}`);
+  if (slotData.charm) lines.push(`Charm: ${slotData.charm}${slotData.charmLevel ? ` (Lv.${slotData.charmLevel})` : ""}`);
+  if (slotData.stats && typeof slotData.stats === "object") {
+    lines.push("");
+    for (const [k, v] of Object.entries(slotData.stats)) {
+      lines.push(`${k}: +${v}`);
+    }
+  }
+  return lines.join("\n");
+}
+
+function showGearTooltip(text, x, y) {
+  if (!els.gearTooltip) return;
+  els.gearTooltip.textContent = text;
+  els.gearTooltip.classList.remove("hidden");
+  moveGeartooltip(x, y);
+}
+
+function moveGearTooltip(x, y) {
+  if (!els.gearTooltip) return;
+  const pad = 14;
+  els.gearTooltip.style.left = `${x + pad}px`;
+  els.gearTooltip.style.top = `${y + pad}px`;
+}
+
+function hideGearTooltip() {
+  if (!els.gearTooltip) return;
+  els.gearTooltip.classList.add("hidden");
+}
+
+function renderProfileView() {
+  const gid = state.profileGid;
+  const rec = findMemberRecordByGid(gid);
+
+  if (!rec) {
+    if (els.profileTitle) els.profileTitle.textContent = "Member Profile";
+    if (els.profileMeta) els.profileMeta.textContent = `Not found for GID: ${gid}`;
+    return;
+  }
+
+  const useAlias = true;
+  const m = rec.member;
+  const a = rec.alliance;
+
+  const tag = a ? (a.tag ?? a.id ?? "") : (m.allianceTag ?? "None");
+  const nameLabel = displayName(m, useAlias);
+  const levelLabel = tcLabel(m.tc);
+  const powerLabel = formatPower(m.power);
+  const mysticLabel = normalizeNum(m.mystic);
+
+  if (els.profileTitle) els.profileTitle.textContent = `${nameLabel} — Profile`;
+  if (els.profileMeta) {
+    const left = (tag && tag !== "None") ? `[${tag}]` : "[None]";
+    els.profileMeta.textContent = `${left}  •  TC/TG: ${levelLabel}  •  Power: ${powerLabel}  •  Mystic: ${mysticLabel}  •  GID: ${gid}`;
+  }
+
+  // Pull profile/gear data from global cache if existing
+  ensurePlayersStore();
+  const p = data.players?.[gid] ?? {};
+  const prof = p.profile ?? p.gear ?? {};
+  const governor = prof.governor ?? prof.gov ?? {};
+  const govSlots = governor.slots ?? {};
+
+  // Wire governor slots
+  if (els.profileGovSlots) {
+    els.profileGovSlots.querySelectorAll(".gearSlot").forEach(el => {
+      const slotKey = el.dataset.slot;
+      const slotData = govSlots?.[slotKey];
+      el.textContent = slotData?.short ?? el.textContent;
+      const tip = buildSlotTooltip(slotData, `Governor Slot ${slotKey}`);
+      el.onmouseenter = (e) => showGearTooltip(tip, e.clientX, e.clientY);
+      el.onmousemove = (e) => moveGearTooltip(e.clientX, e.clientY);
+      el.onmouseleave = () => hideGearTooltip();
+    });
+  }
+
+  // Heroes 
+  const heroes = prof.heroes ?? [];
+  if (els.hero0Name) els.hero0Name.textContent = heroes?.[0]?.name ?? "Hero 1";
+  if (els.hero1Name) els.hero1Name.textContent = heroes?.[1]?.name ?? "Hero 2";
+  if (els.hero2Name) els.hero2Name.textContent = heroes?.[2]?.name ?? "Hero 3";
+
+  // Totals placeholders
+  if (els.govTotalsBox) els.govTotalsBox.textContent = "Governor totals: (no data yet)";
+  if (els.heroTotalsBox) els.heroTotalsBox.textContent = "Hero totals: (no data yet)";
 }
 
 // ---------- leaderboard (all members) ----------
@@ -1627,6 +1785,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     els.backHomeFromRosterBtn?.addEventListener("click", () => goHome());
     els.addMemberBtn?.addEventListener("click", () => openMemberModal("add"));
     els.editMemberBtn?.addEventListener("click", () => openMemberModal("edit"));
+    els.viewProfileBtn?.addEventListener("click", () => openProfileView(state.selectedMemberId, "roster"));
     els.removeMemberBtn?.addEventListener("click", async () => {
       try {
         const a = getCurrentAlliance();
@@ -1670,6 +1829,13 @@ document.addEventListener("DOMContentLoaded", async () => {
       if (gid) els.uGid.value = gid;
       goUpdate();
       els.uGid.focus();
+    });
+
+    // profile view buttons
+    els.backToRosterFromProfileBtn?.addEventListener("click", () => closeProfileView());
+    els.backHomeFromProfileBtn?.addEventListener("click", () => {
+      state.profileBackView = "home";
+      goHome();
     });
 
     // Search/sort
